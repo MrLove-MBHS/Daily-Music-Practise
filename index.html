@@ -221,15 +221,11 @@
       let now = new Date();
       now.setHours(0,0,0,0);
       let todayDay = now.getDay();
-      // Saturday == 6, so reset logs on Saturday morning
       if (todayDay === 6) {
         localStorage.removeItem("dailyLogs");
         localStorage.removeItem("lastPractiseDate");
-        // Optionally clear name entry too, for full reset
-        // localStorage.removeItem("practiseName");
       }
     }
-    // Weekly table: show Saturday–Friday
     function getSaturdayWeekDates() {
       let now = new Date();
       now.setHours(0,0,0,0);
@@ -319,7 +315,6 @@
         document.getElementById(id).classList.add("hidden");
       });
     }
-    // -------- Standalone Rhythm ---------
     function showStandaloneRhythm() {
       resetForNewDayIfNeeded();
       document.getElementById("dailyIntroScreen").classList.add("hidden");
@@ -350,7 +345,590 @@
     }
 
     //---------------- NOTE READING ----------------
-    /* ... Note reading logic remains unchanged (see previous versions for large code block) ... */
+    const noteNames = ["A", "B", "C", "D", "E", "F", "G"];
+    let noteMode = "both";
+    const bassNotes = ["C2","D2","E2","F2","G2","A2","B2","C3","D3","E3","F3","G3","A3","B3","C4"];
+    const trebleNotes = ["C4","D4","E4","F4","G4","A4","B4","C5","D5","E5","F5","G5","A5","B5","C6"];
+    let currentNote = null;
+    let noteScore = 0;
+    const noteTotal = 20;
+
+    function renderNoteModeUI() {
+      document.getElementById('bassBtn').classList.remove('selected');
+      document.getElementById('bothBtn').classList.remove('selected');
+      document.getElementById('trebleBtn').classList.remove('selected');
+      if(noteMode === 'bass')      document.getElementById('bassBtn').classList.add('selected');
+      else if(noteMode === 'treble') document.getElementById('trebleBtn').classList.add('selected');
+      else document.getElementById('bothBtn').classList.add('selected');
+    }
+    function setNoteMode(mode) {
+      noteMode = mode;
+      renderNoteModeUI();
+      renderNoteQuestion(currentNote || getRandomNote());
+    }
+    function startNotePractice() { noteScore = 0; nextNote(); }
+    function nextNote() {
+      if (noteScore >= noteTotal) {
+        document.getElementById("noteImageDiv").innerHTML = "";
+        document.getElementById("noteButtonsDiv").innerHTML = "";
+        document.getElementById("noteFeedbackDiv").innerText = "✔️ Step complete! Moving to rhythm practice...";
+        setTimeout(showRhythmPractice, 1200);
+        return;
+      }
+      currentNote = getRandomNote();
+      renderNoteQuestion(currentNote);
+    }
+    function getRandomNote() {
+      let selectList;
+      if(noteMode === "bass") selectList = bassNotes;
+      else if(noteMode === "treble") selectList = trebleNotes;
+      else selectList = bassNotes.concat(trebleNotes);
+      let noteName = selectList[Math.floor(Math.random() * selectList.length)];
+      let imgFile;
+      if (noteName === "C4") {
+        imgFile = (noteMode === "bass")    ? "C4Bass.png"
+               : (noteMode === "treble")  ? "C4Treble.png"
+               : (Math.random() < 0.5)    ? "C4Bass.png" : "C4Treble.png";
+      } else {
+        imgFile = noteName + ".png";
+      }
+      return { noteName, imgFile };
+    }
+    function renderNoteQuestion(q) {
+      currentNote = q;
+      document.getElementById("noteImageDiv").innerHTML =
+        `<img src="images/${q.imgFile}" alt="${q.noteName}" class="noteImg">`;
+      let html = "";
+      noteNames.forEach(note => { html += `<button class="noteBtn" onclick="checkNoteAnswer('${note}')">${note}</button>`; });
+      document.getElementById("noteButtonsDiv").innerHTML = html;
+      document.getElementById("noteScoreDiv").innerText = `Score: ${noteScore} / ${noteTotal}`;
+      document.getElementById("noteFeedbackDiv").innerText = "";
+    }
+    function checkNoteAnswer(selectedNote) {
+      let correct = currentNote.noteName[0] === selectedNote;
+      if (correct) {
+        noteScore += 1;
+        document.getElementById("noteScoreDiv").innerText = `Score: ${noteScore} / ${noteTotal}`;
+        document.getElementById("noteFeedbackDiv").innerText = "✅ Correct!";
+        if (noteScore >= noteTotal) {
+          document.getElementById("noteImageDiv").innerHTML = "";
+          document.getElementById("noteButtonsDiv").innerHTML = "";
+          document.getElementById("noteFeedbackDiv").innerText = "✔️ Step complete! Moving to rhythm practice...";
+          setTimeout(showRhythmPractice, 1200);
+        } else {
+          setTimeout(nextNote, 600);
+        }
+      } else { document.getElementById("noteFeedbackDiv").innerText = "❌ Try again!"; }
+    }
+
+    // ---------------- RHYTHM (DAILY) ---------------- 
+    let scoreMap = { easy: 0, intermediate: 0, hard: 0 };
+    let score = 0;
+    let playbackTimeouts = [];
+    let playbackActive = false;
+    let level = "intermediate";
+    const levels = {
+      easy: {
+        rhythmBtnTypes: ["crotchet", "quaverPair"],
+        generator: function() {
+          let beatsLeft = 4, rhythm = [];
+          while (beatsLeft > 0) {
+            let options = [];
+            if (beatsLeft >= 1) options.push("crotchet");
+            if (beatsLeft >= 1) options.push("quaverPair");
+            let choice = options[Math.floor(Math.random() * options.length)];
+            if (choice === "crotchet") { rhythm.push("crotchet"); beatsLeft -= 1; }
+            else if (choice === "quaverPair") { rhythm.push("quaverPair"); beatsLeft -= 1; }
+          }
+          return rhythm;
+        }
+      },
+      intermediate: {
+        rhythmBtnTypes: [
+          "minim", "crotchet", "quaverPair", "dottedCrotchet", "quaver"
+        ],
+        generator: function() {
+          let beatsLeft = 4, rhythm = [];
+          while (beatsLeft > 0) {
+            if (beatsLeft === 2) {
+              const setOptions = [
+                ["minim"],
+                ["crotchet", "crotchet"],
+                ["dottedCrotchet", "quaver"]
+              ];
+              const set = setOptions[Math.floor(Math.random() * setOptions.length)];
+              rhythm = rhythm.concat(set);
+              beatsLeft = 0;
+            } else {
+              let options = [];
+              if (beatsLeft >= 2) options.push("minim");
+              if (beatsLeft >= 1) {
+                options.push("crotchet");
+                options.push("quaverPair");
+              }
+              if (beatsLeft === 1.5) options.push("dottedCrotchetPlusQuaver");
+              let choice = options[Math.floor(Math.random() * options.length)];
+              if (choice === "minim") { rhythm.push("minim"); beatsLeft -= 2; }
+              else if (choice === "crotchet") { rhythm.push("crotchet"); beatsLeft -= 1; }
+              else if (choice === "quaverPair") { rhythm.push("quaverPair"); beatsLeft -= 1; }
+              else if (choice === "dottedCrotchetPlusQuaver") {
+                rhythm.push("dottedCrotchet");
+                rhythm.push("quaver");
+                beatsLeft -= 1.5; beatsLeft -= 0.5;
+              }
+            }
+          }
+          return rhythm;
+        }
+      },
+      hard: {
+        rhythmBtnTypes: [
+          "minim", "crotchet", "quaverPair", "dottedQuaverSemiQuaver", "fourSemiQuavers", "dottedCrotchet", "quaver"
+        ],
+        generator: function() {
+          let beatsLeft = 4, rhythm = [];
+          while (beatsLeft > 0) {
+            if (beatsLeft === 2) {
+              const setOptions = [
+                ["minim"],
+                ["crotchet", "crotchet"],
+                ["quaverPair", "quaverPair"],
+                ["dottedCrotchet", "quaver"]
+              ];
+              const set = setOptions[Math.floor(Math.random() * setOptions.length)];
+              rhythm = rhythm.concat(set);
+              beatsLeft = 0;
+            } else {
+              let options = [];
+              if (beatsLeft >= 2) options.push("minim");
+              if (beatsLeft >= 1) {
+                options.push("crotchet");
+                options.push("quaverPair");
+                options.push("dottedQuaverSemiQuaver");
+                options.push("fourSemiQuavers");
+              }
+              if (beatsLeft === 1.5) options.push("dottedCrotchetPlusQuaver");
+              let choice = options[Math.floor(Math.random() * options.length)];
+              if (choice === "minim") { rhythm.push("minim"); beatsLeft -= 2; }
+              else if (choice === "crotchet") { rhythm.push("crotchet"); beatsLeft -= 1; }
+              else if (choice === "quaverPair") { rhythm.push("quaverPair"); beatsLeft -= 1; }
+              else if (choice === "dottedQuaverSemiQuaver") { rhythm.push("dottedQuaverSemiQuaver"); beatsLeft -= 1; }
+              else if (choice === "fourSemiQuavers") { rhythm.push("fourSemiQuavers"); beatsLeft -= 1; }
+              else if (choice === "dottedCrotchetPlusQuaver") {
+                rhythm.push("dottedCrotchet");
+                rhythm.push("quaver");
+                beatsLeft -= 1.5; beatsLeft -= 0.5;
+              }
+            }
+          }
+          return rhythm;
+        }
+      }
+    };
+
+    function setLevel(lvl) {
+      level = lvl;
+      updateLevelButtons();
+      renderAnswerBtns();
+      clearAnswer();
+      score = scoreMap[level];
+      updateScoreDisplay();
+      setGenerateBtnState(true);
+      savedBars = null;
+      stopPlayback();
+    }
+    function updateLevelButtons() {
+      ["easyBtnPractice", "intermediateBtnPractice", "hardBtnPractice"].forEach(id => {
+        document.getElementById(id).classList.remove("selected");
+      });
+      document.getElementById(level+"BtnPractice").classList.add("selected");
+    }
+    let savedBars = null;
+    let answer = [[],[],[],[]];
+    let validation = [[],[],[],[]];
+    let canGenerate = true;
+    const imageFilenames = {
+      "minim": "minim.png",
+      "crotchet": "crotchet.png",
+      "dottedCrotchet": "dottedCrotchet.png",
+      "quaver": "quaver.png",
+      "quaverPair": "twoQuavers.png",
+      "dottedQuaverSemiQuaver": "dottedQuaverSemiQuaver.png",
+      "fourSemiQuavers": "fourSemiQuavers.png"
+    };
+    const noteWidths = {
+      minim: 42,
+      crotchet: 42,
+      dottedCrotchet: 42,
+      quaver: 42,
+      quaverPair: 95,
+      dottedQuaverSemiQuaver: 95,
+      fourSemiQuavers: 95
+    };
+    const beatPx = 95;
+    const rhythmDurations = {
+      minim: 2,
+      crotchet: 1,
+      quaverPair: 1,
+      dottedCrotchet: 1.5,
+      quaver: 0.5,
+      dottedQuaverSemiQuaver: 1,
+      fourSemiQuavers: 1
+    };
+    let gap = null;
+
+    function stopPlayback() {
+      playbackActive = false;
+      playbackTimeouts.forEach(timeoutID => clearTimeout(timeoutID));
+      playbackTimeouts = [];
+    }
+    function updateScoreDisplay() {
+      document.getElementById('scoreDiv').innerText =
+        "Score (" + level.charAt(0).toUpperCase() + level.slice(1) + "): " + scoreMap[level];
+      updateDailyRhythmScore();
+    }
+    function setGenerateBtnState(enabled) {
+      let btn = document.getElementById('generateBtn');
+      if (enabled) {
+        btn.classList.remove('disabledBtn');
+        btn.disabled = false;
+        canGenerate = true;
+      } else {
+        btn.classList.add('disabledBtn');
+        btn.disabled = true;
+        canGenerate = false;
+      }
+    }
+    function clickSound() {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square"; osc.frequency.value = 1200; gain.gain.value = 0.5;
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.02);
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02);
+    }
+    function beepSound() {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.type = "sine"; osc.frequency.value = 800; gain.gain.value = 0.2;
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+    }
+    function generateRhythmBar() { return levels[level].generator(); }
+    function generateAndPlayRhythm() {
+      if (!canGenerate) return;
+      stopPlayback();
+      gap = null;
+      const bars = [];
+      for (let i = 0; i < 4; i++) bars.push(generateRhythmBar());
+      savedBars = bars;
+      playWithCountIn(bars);
+      clearAnswer();
+      renderAnswerBtns();
+      setGenerateBtnState(false);
+      document.getElementById('rhythmTickDiv').innerText = "";
+    }
+    function replayRhythm() {
+      stopPlayback();
+      gap = null;
+      if (!savedBars) return;
+      playWithCountIn(savedBars);
+      renderAnswerBtns();
+      renderAnswer();
+    }
+    function playWithCountIn(bars) {
+      stopPlayback();
+      playbackActive = true;
+      const beatMs = 500;
+      for (let i = 0; i < 4; i++) {
+        playbackTimeouts.push(setTimeout(() => { if (playbackActive) beepSound(); }, i * beatMs));
+      }
+      let globalTick = 2000;
+      bars.forEach(bar => {
+        bar.forEach(type => {
+          if (type === "dottedQuaverSemiQuaver") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick));
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick + 375));
+            globalTick += beatMs;
+          } else if (type === "fourSemiQuavers") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick));
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick + 125));
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick + 250));
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick + 375));
+            globalTick += beatMs;
+          } else if (type === "minim") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick ));
+            globalTick += 2 * beatMs;
+          } else if (type === "dottedCrotchet") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick));
+            globalTick += 1.5 * beatMs;
+          } else if (type === "crotchet") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick));
+            globalTick += beatMs;
+          } else if (type === "quaverPair") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick));
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick + 250));
+            globalTick += beatMs;
+          } else if (type === "quaver") {
+            playbackTimeouts.push(setTimeout(() => { if (playbackActive) clickSound(); }, globalTick));
+            globalTick += 250;
+          }
+        });
+      });
+    }
+    function renderAnswerBtns() {
+      let rhythmBtnTypes = levels[level].rhythmBtnTypes;
+      let html = 'Choose rhythm: ';
+      rhythmBtnTypes.forEach(type => {
+        html += `<button class="rhythmBtn" onclick="answerAdd('${type}')"><img src="images/${imageFilenames[type]}" alt="${type}" style="height:55px;vertical-align:middle;"></button>`;
+      });
+      document.getElementById('answerBtns').innerHTML = html;
+    }
+    function answerAdd(type) {
+      for (let i = 0; i < 4; i++) {
+        let barBeats = answerBeats(answer[i]);
+        let duration = rhythmDurations[type];
+        if (barBeats < 4 && barBeats <= 4 - duration) {
+          answer[i].push(type);
+          renderAnswer();
+          break;
+        }
+      }
+    }
+    function answerBeats(arr) { let total = 0; arr.forEach(type => { total += rhythmDurations[type] || 0; }); return total; }
+    function renderAnswer() { for (let i = 0; i < 4; i++) document.getElementById('answerBar'+i).innerHTML = drawBar(answer[i], null, i); }
+    function removeNote(barIdx, noteIdx) { answer[barIdx].splice(noteIdx, 1); gap = [barIdx, noteIdx]; renderAnswer(); }
+    function clearAnswer() { answer = [[],[],[],[]]; validation = [[],[],[],[]]; gap = null; renderAnswer(); }
+    function validateAnswer() {
+      validation = [[],[],[],[]];
+      for (let i = 0; i < 4; i++) {
+        let genBar = savedBars[i] || [], ansBar = answer[i];
+        for (let j = 0; j < ansBar.length; j++) validation[i][j] = (ansBar[j] === genBar[j]);
+      }
+      for (let i = 0; i < 4; i++) document.getElementById('answerBar'+i).innerHTML = drawBar(answer[i], validation[i], i);
+      if (isCompletelyCorrect()) {
+        scoreMap[level] += 1; score = scoreMap[level]; updateScoreDisplay();
+        setGenerateBtnState(true);
+        document.getElementById('rhythmTickDiv').innerText = "✔️ Correct!";
+      }
+    }
+    function isCompletelyCorrect() {
+      if (!savedBars) return false;
+      for (let i = 0; i < 4; i++) {
+        if (answerBeats(answer[i]) !== 4) return false;
+        let genBar = savedBars[i] || [], ansBar = answer[i];
+        if (ansBar.length !== genBar.length) return false;
+        for (let j = 0; j < ansBar.length; j++) { if (ansBar[j] !== genBar[j]) return false; }
+      }
+      return true;
+    }
+    function drawBar(barArr, validationArr, barIdx, suffix) {
+      let html = '', beats = 0;
+      for (let j = 0; j < barArr.length; j++) {
+        if (barArr[j] != null) {
+          let isCorrect = validationArr ? validationArr[j] : false;
+          html += `<img src="images/${imageFilenames[barArr[j]]}" alt="${barArr[j]}"
+                    class="rhythmImg${isCorrect ? ' correct' : ''}"
+                    style="width:${noteWidths[barArr[j]]}px;"
+                    onclick="removeNote${suffix ? suffix : ''}(${barIdx},${j})">`;
+          let fill = 0;
+          if (barArr[j] === "quaverPair" || barArr[j] === "dottedQuaverSemiQuaver" || barArr[j] === "fourSemiQuavers") {}
+          else if (barArr[j] === "minim") { fill = (beatPx - noteWidths.minim) + beatPx; }
+          else { fill = beatPx * rhythmDurations[barArr[j]] - noteWidths[barArr[j]]; }
+          if (fill > 0.1) html += `<span class="gapBox" style="width:${fill}px;"></span>`;
+          beats += rhythmDurations[barArr[j]];
+        }
+      }
+      let gapBeats = 4 - beats;
+      if ((suffix === "Standalone" && gapStandalone !== null && gapStandalone[0] === barIdx) || (suffix !== "Standalone" && gap !== null && gap[0] === barIdx) || beats < 4) {
+        let gapPx = beatPx * gapBeats;
+        html += `<span class="gapBox" style="width:${gapPx}px;"></span>`;
+      }
+      return html;
+    }
+
+    // STANDALONE RHYTHM 
+    let standaloneLevel = "intermediate";
+    let standaloneScore = 0;
+    let savedBarsStandalone = null;
+    let answerStandalone = [[],[],[],[]];
+    let validationStandalone = [[],[],[],[]];
+    let canGenerateStandalone = true;
+    let gapStandalone = null;
+
+    function updateLevelButtonsStandalone() {
+      ["easyBtnPracticeStandalone", "intermediateBtnPracticeStandalone", "hardBtnPracticeStandalone"].forEach(id => {
+        document.getElementById(id).classList.remove("selected");
+      });
+      document.getElementById(standaloneLevel+"BtnPracticeStandalone").classList.add("selected");
+    }
+    function setLevelStandalone(lvl) {
+      standaloneLevel = lvl;
+      updateLevelButtonsStandalone();
+      renderAnswerBtnsStandalone();
+      clearAnswerStandalone();
+      setGenerateBtnStateStandalone(true);
+      savedBarsStandalone = null;
+      stopPlaybackStandalone();
+    }
+    function updateScoreDisplayStandalone() { document.getElementById('currentStandaloneRhythmScore').innerText = standaloneScore; }
+    function setGenerateBtnStateStandalone(enabled) {
+      let btn = document.getElementById('generateBtnStandalone');
+      if (enabled) { btn.classList.remove('disabledBtn'); btn.disabled = false; canGenerateStandalone = true; }
+      else { btn.classList.add('disabledBtn'); btn.disabled = true; canGenerateStandalone = false; }
+    }
+    function generateAndPlayRhythmStandalone() {
+      if (!canGenerateStandalone) return;
+      stopPlaybackStandalone();
+      gapStandalone = null;
+      const bars = [];
+      for (let i = 0; i < 4; i++) bars.push(levels[standaloneLevel].generator());
+      savedBarsStandalone = bars;
+      playWithCountInStandalone(bars);
+      clearAnswerStandalone();
+      renderAnswerBtnsStandalone();
+      setGenerateBtnStateStandalone(false);
+      document.getElementById('rhythmTickDivStandalone').innerText = "";
+    }
+    function replayRhythmStandalone() {
+      stopPlaybackStandalone();
+      gapStandalone = null;
+      if (!savedBarsStandalone) return;
+      playWithCountInStandalone(savedBarsStandalone);
+      renderAnswerBtnsStandalone();
+      renderAnswerStandalone();
+    }
+    let playbackTimeoutsStandalone = [];
+    let playbackActiveStandalone = false;
+    function stopPlaybackStandalone() {
+      playbackActiveStandalone = false;
+      playbackTimeoutsStandalone.forEach(timeoutID => clearTimeout(timeoutID));
+      playbackTimeoutsStandalone = [];
+    }
+    function playWithCountInStandalone(bars) {
+      stopPlaybackStandalone();
+      playbackActiveStandalone = true;
+      const beatMs = 500;
+      for (let i = 0; i < 4; i++) { playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) beepSound(); }, i * beatMs)); }
+      let globalTick = 2000;
+      bars.forEach(bar => {
+        bar.forEach(type => {
+          if (type === "dottedQuaverSemiQuaver") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick));
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick + 375));
+            globalTick += beatMs;
+          } else if (type === "fourSemiQuavers") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick));
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick + 125));
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick + 250));
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick + 375));
+            globalTick += beatMs;
+          } else if (type === "minim") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick ));
+            globalTick += 2 * beatMs;
+          } else if (type === "dottedCrotchet") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick));
+            globalTick += 1.5 * beatMs;
+          } else if (type === "crotchet") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick));
+            globalTick += beatMs;
+          } else if (type === "quaverPair") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick));
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick + 250));
+            globalTick += beatMs;
+          } else if (type === "quaver") {
+            playbackTimeoutsStandalone.push(setTimeout(() => { if (playbackActiveStandalone) clickSound(); }, globalTick));
+            globalTick += 250;
+          }
+        });
+      });
+    }
+    function renderAnswerBtnsStandalone() {
+      let rhythmBtnTypes = levels[standaloneLevel].rhythmBtnTypes;
+      let html = 'Choose rhythm: ';
+      rhythmBtnTypes.forEach(type => {
+        html += `<button class="rhythmBtn" onclick="answerAddStandalone('${type}')"><img src="images/${imageFilenames[type]}" alt="${type}" style="height:55px;vertical-align:middle;"></button>`;
+      });
+      document.getElementById('answerBtnsStandalone').innerHTML = html;
+    }
+    function answerAddStandalone(type) {
+      for (let i = 0; i < 4; i++) {
+        let barBeats = answerBeats(answerStandalone[i]);
+        let duration = rhythmDurations[type];
+        if (barBeats < 4 && barBeats <= 4 - duration) {
+          answerStandalone[i].push(type);
+          renderAnswerStandalone();
+          break;
+        }
+      }
+    }
+    function renderAnswerStandalone() {
+      for (let i = 0; i < 4; i++) {
+        document.getElementById('answerBar'+i+'Standalone').innerHTML = drawBar(answerStandalone[i], null, i, "Standalone");
+      }
+    }
+    function clearAnswerStandalone() {
+      answerStandalone = [[],[],[],[]];
+      validationStandalone = [[],[],[],[]];
+      gapStandalone = null;
+      renderAnswerStandalone();
+    }
+    function validateAnswerStandalone() {
+      validationStandalone = [[],[],[],[]];
+      for (let i = 0; i < 4; i++) {
+        let genBar = savedBarsStandalone[i] || [];
+        let ansBar = answerStandalone[i];
+        for (let j = 0; j < ansBar.length; j++) {
+          validationStandalone[i][j] = (ansBar[j] === genBar[j]);
+        }
+      }
+      for (let i = 0; i < 4; i++) {
+        document.getElementById('answerBar'+i+'Standalone').innerHTML = drawBar(answerStandalone[i], validationStandalone[i], i, "Standalone");
+      }
+      if (isCompletelyCorrectStandalone()) {
+        standaloneScore += 1;
+        updateScoreDisplayStandalone();
+        updateDailyRhythmScore();
+        setGenerateBtnStateStandalone(true);
+        document.getElementById('rhythmTickDivStandalone').innerText = "✔️ Correct!";
+      }
+    }
+    function isCompletelyCorrectStandalone() {
+      if (!savedBarsStandalone) return false;
+      for (let i = 0; i < 4; i++) {
+        if (answerBeats(answerStandalone[i]) !== 4) return false;
+        let genBar = savedBarsStandalone[i] || [];
+        let ansBar = answerStandalone[i];
+        if (ansBar.length !== genBar.length) return false;
+        for (let j = 0; j < ansBar.length; j++) { if (ansBar[j] !== genBar[j]) return false; }
+      }
+      return true;
+    }
+    function removeNoteStandalone(barIdx, noteIdx) { answerStandalone[barIdx].splice(noteIdx, 1); gapStandalone = [barIdx, noteIdx]; renderAnswerStandalone(); }
+    function updateDailyRhythmScore() {
+      let today = new Date();
+      let dateKey = today.toISOString().split("T")[0];
+      let logs = JSON.parse(localStorage.getItem("dailyLogs") || "{}");
+      let dailyScore = Math.max(getTodayRhythmScore(), scoreMap.easy+scoreMap.intermediate+scoreMap.hard, standaloneScore);
+      let current = logs[dateKey] || {
+        date: dateKey,
+        day: ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][today.getDay()],
+        noteReadingCompleted: false,
+        noteScore: 0,
+        rhythmExamples: 0,
+        practised: false,
+        pieces: "",
+        comments: ""
+      };
+      current.rhythmExamples = dailyScore;
+      logs[dateKey] = current;
+      localStorage.setItem("dailyLogs", JSON.stringify(logs));
+      document.getElementById('currentStandaloneRhythmScore').innerText = dailyScore;
+    }
 
     //------------------- PRACTICE LOG SUBMIT -------------------
     function submitLog() {
@@ -363,7 +941,6 @@
         return;
       }
 
-      // Gather all daily data
       let rhythmAttempts = Math.max(scoreMap.easy + scoreMap.intermediate + scoreMap.hard, standaloneScore, getTodayRhythmScore());
       let noteCompleted = noteScore >= noteTotal;
 
@@ -383,7 +960,6 @@
         comments: comments
       };
 
-      // Save in localStorage
       let allLogs = JSON.parse(localStorage.getItem("dailyLogs") || "{}");
       allLogs[dateKey] = logObj;
       localStorage.setItem("dailyLogs", JSON.stringify(allLogs));
@@ -403,7 +979,6 @@
       document.getElementById("practiceCompleteScreen").classList.remove("hidden");
     }
 
-    //-----------------------------------------------------------
     // On load: determine which screen to show
     function goToCorrectStartScreen() {
       let storedName = localStorage.getItem("practiseName") || "";
@@ -416,28 +991,22 @@
       }
 
       document.getElementById("alreadyDoneMsg").innerHTML = "";
-      // Default enables Start Practice button
       document.getElementById("startPracticeBtn").style.display = "";
 
       if (todayLog && todayLog.practised) {
-        // Already submitted daily log for today
         document.getElementById("nameEntryScreen").classList.add("hidden");
         document.getElementById("dailyIntroScreen").classList.remove("hidden");
         document.getElementById("userNameDisplay").innerHTML =
           `<strong>User:</strong> ${storedName}`;
-        // Hide Start Practice button and show info message
         document.getElementById("startPracticeBtn").style.display = "none";
         document.getElementById("alreadyDoneMsg").innerHTML =
           "Daily practice already submitted for today.<br>You can continue rhythm practice or view logs.";
-
         return;
       }
       showNamePromptIfNeeded();
     }
 
     goToCorrectStartScreen();
-
-    // (NOTE: Copy the previous Note/Rhythm logic blocks into this document as needed)
   </script>
 </body>
 </html>
